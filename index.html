@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lead Research &amp; Qualification Assistant</title>
+<style>
+:root{--c:#7a1f3d;--tint:#f8eef1;--line:#e8d3da;--ink:#2a1219;--mute:#7a5d66}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:var(--ink);font:15px/1.55 "Segoe UI",system-ui,sans-serif}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 28px;border-bottom:1px solid var(--line)}
+.top h1{font:600 20px Georgia,serif;color:var(--c);margin:0}
+button.b{background:#fff;color:var(--c);border:1.5px solid var(--c);border-radius:8px;padding:8px 16px;font:600 14px inherit;cursor:pointer;margin:0 8px 0 0}
+button.b:hover:not(:disabled){background:var(--tint)}button:disabled{opacity:.5}
+#setup{display:none;padding:20px 28px;background:var(--tint);border-bottom:1px solid var(--line)}
+#setup.on{display:block}
+.cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+label.f{display:block;font-size:13px;font-weight:600;color:var(--c);margin:8px 0 4px}
+input,textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px;font:inherit;color:var(--ink);background:#fff}
+textarea{min-height:90px;resize:vertical}
+label.chk{display:flex;gap:8px;font-size:13px;margin:12px 0}label.chk input{width:auto;margin-top:3px}
+.board{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:22px 28px}
+.col{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;min-height:200px}
+.col h2{font:600 15px Georgia,serif;color:var(--c);margin:0 0 10px;display:flex;justify-content:space-between}
+.card{border:1px solid var(--line);border-left:4px solid var(--c);border-radius:8px;padding:10px 12px;margin-bottom:10px;cursor:pointer;background:#fff}
+.card:hover{background:var(--tint)}
+.card b{display:block}.card span{font-size:13px;color:var(--mute)}
+.empty{font-size:13px;color:var(--mute);padding:10px}
+#drawer{position:fixed;top:0;right:-560px;width:min(540px,100%);height:100%;background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(42,18,25,.12);padding:24px;overflow:auto;transition:right .2s}
+#drawer.on{right:0}
+#drawer h2{font:600 20px Georgia,serif;color:var(--c);margin:0 0 4px}
+.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--c);font-weight:600;margin-top:16px}
+.crit{border-top:1px solid var(--line);padding:8px 0;font-size:14px}
+.pill{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;border:1.5px solid var(--c);color:var(--c);border-radius:20px;padding:0 9px;margin-right:6px}
+.pill.u{border-style:dashed}
+.q{background:var(--tint);border-radius:6px;padding:5px 9px;margin-top:4px;font-size:13px}
+.msg{background:var(--tint);border-radius:8px;padding:12px;white-space:pre-wrap;font-size:14px}
+a{color:var(--c)}
+.err{background:var(--tint);border-left:4px solid var(--c);padding:10px 14px;border-radius:6px;margin:12px 28px}
+.note{font-size:13px;color:var(--mute)}
+@media(max-width:860px){.cols,.board{grid-template-columns:1fr}.top,.board{padding-left:16px;padding-right:16px}}
+</style>
+</head>
+<body>
+<div class="top"><h1>Lead Research &amp; Qualification</h1><div><button class="b" id="toggle">New research</button><button class="b" id="demo">Load demo</button></div></div>
+<div id="setup" class="on">
+<div class="cols">
+<div><label class="f">Ideal customer profile (ICP)</label><textarea id="icp" placeholder="e.g. Independent fitness studios in India, 1 to 10 locations, sells classes online"></textarea>
+<label class="f">What you are selling</label><textarea id="offer" placeholder="One or two sentences"></textarea></div>
+<div style="grid-column:span 2"><label class="f">Leads, one per line: Company | website | optional notes</label>
+<textarea id="leads" style="min-height:150px" placeholder="Example Studio | https://example.com | met at expo, asked about pricing"></textarea>
+<label class="chk"><input type="checkbox" id="ok"> These are businesses I may research from public pages. Notes contain only details I was given. The tool follows robots.txt and reads up to 3 pages per site (max 5 leads).</label>
+<button class="b" id="go">Research &amp; qualify</button></div>
+</div></div>
+<div id="msg"></div>
+<div class="board" id="board"></div>
+<aside id="drawer"></aside>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let res=[];
+$("toggle").onclick=()=>$("setup").classList.toggle("on");
+$("go").onclick=async()=>{
+  const leads=$("leads").value.split("\n").map(l=>l.split("|").map(x=>x.trim())).filter(a=>a[1]).map(a=>({name:a[0]||a[1],url:a[1],notes:a[2]||""}));
+  $("go").disabled=true;$("go").textContent="Researching…";$("msg").innerHTML="";
+  try{
+    const r=await fetch("/api/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({icp:$("icp").value,offer:$("offer").value,leads,consent:$("ok").checked})});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||"Request failed");
+    res=d.results;board();$("setup").classList.remove("on");
+  }catch(e){$("msg").innerHTML=`<div class="err">${esc(e.message)}</div>`}
+  $("go").disabled=false;$("go").textContent="Research & qualify";
+};
+$("demo").onclick=()=>{const u="https://demo-yoga.example";res=[
+{demo:true,name:"Lotus Yoga Studio",url:u,pages:[u+"/",u+"/classes"],what_they_do:"A single-location yoga studio offering in-person and online classes.",fit:"Strong",
+criteria:[{criterion:"Independent fitness studio",status:"match",evidence_url:u+"/",quote:"Our neighbourhood studio since 2016",verified:true},{criterion:"Sells classes online",status:"match",evidence_url:u+"/classes",quote:"Book live online classes from home",verified:true},{criterion:"1 to 10 locations",status:"match",evidence_url:u+"/",quote:"Visit us at our studio",verified:true}],
+outreach_angle:"Their site promotes both in-person and online classes, so a unified booking tool could be relevant.",draft_message:"Hi [Name],\n\nI saw that Lotus Yoga Studio offers both in-person classes and live online sessions. We help studios handle both kinds of booking in one place. Would it be useful if I shared how that works?\n\nBest,\n[Your name]",unknowns:["Who handles bookings today","Current booking tool, not stated on the pages"]},
+{demo:true,name:"Metro Gym Chain",url:"https://demo-gym.example",pages:["https://demo-gym.example/"],what_they_do:"A gym chain with several branches.",fit:"Weak",
+criteria:[{criterion:"Independent fitness studio",status:"mismatch",evidence_url:"https://demo-gym.example/",quote:"Over 40 branches nationwide",verified:true},{criterion:"Sells classes online",status:"unknown",evidence_url:"",quote:"",verified:false}],
+outreach_angle:"Likely outside the ICP because of its size. Review manually before any outreach.",draft_message:"No draft recommended.",unknowns:["Whether any independent franchise branches exist"]},
+{demo:true,name:"Quiet Pilates",url:"https://demo-pilates.example",pages:["https://demo-pilates.example/"],what_they_do:"The pages give very little information about the business.",fit:"Unclear",criteria:[{criterion:"Independent fitness studio",status:"unknown",evidence_url:"",quote:"",verified:false}],
+outreach_angle:"Not enough evidence to suggest an angle.",draft_message:"No draft recommended.",unknowns:["What the business offers","Location and size"]}];board();$("setup").classList.remove("on")};
+function board(){
+  const cols=[["Strong fit",r=>r.fit==="Strong"],["Possible fit",r=>r.fit==="Possible"],["Weak, unclear or failed",r=>r.error||r.fit==="Weak"||r.fit==="Unclear"]];
+  $("board").innerHTML=cols.map(([t,f])=>{const items=res.map((r,i)=>[r,i]).filter(x=>f(x[0]));
+    return `<div class="col"><h2>${t}<span>${items.length}</span></h2>${items.map(([r,i])=>`<div class="card" onclick="open_(${i})"><b>${esc(r.name)}</b><span>${r.error?"Could not research: "+esc(r.error):esc(r.what_they_do)}</span></div>`).join("")||'<div class="empty">None</div>'}</div>`}).join("");
+}
+function open_(i){
+  const r=res[i];
+  $("drawer").innerHTML=`<button class="b" onclick="document.getElementById('drawer').classList.remove('on')">Close</button>
+  <h2>${esc(r.name)}</h2><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url)}</a>${r.demo?'<p class="note">DEMO DATA: invented example, not a real business.</p>':""}
+  ${r.error?`<p>${esc(r.error)}</p>`:`<div class="lbl">What they do</div><div>${esc(r.what_they_do)}</div>
+  <div class="lbl">Fit against your ICP: ${esc(r.fit)}</div>${(r.criteria||[]).map(c=>`<div class="crit"><span class="pill ${c.status==="unknown"?"u":""}">${esc(c.status)}</span>${esc(c.criterion)}
+  ${c.quote?`<div class="q">“${esc(c.quote)}” <a href="${esc(c.evidence_url)}" target="_blank" rel="noopener">source</a> <span class="note">(quote verified in page text)</span></div>`:'<div class="note">No evidence found.</div>'}</div>`).join("")}
+  <div class="lbl">Outreach angle</div><div>${esc(r.outreach_angle)}</div>
+  <div class="lbl">Draft message (review before use)</div><div class="msg" id="draft">${esc(r.draft_message)}</div>
+  <button class="b" style="margin-top:10px" onclick="navigator.clipboard.writeText(document.getElementById('draft').textContent)">Copy draft</button>
+  <div class="lbl">Check before sending</div><ul>${(r.unknowns||[]).map(u=>`<li>${esc(u)}</li>`).join("")}</ul>
+  <div class="lbl">Pages read</div>${(r.pages||[]).map(p=>`<div class="note"><a href="${esc(p)}" target="_blank" rel="noopener">${esc(p)}</a></div>`).join("")}`}`;
+  $("drawer").classList.add("on");
+}
+</script>
+</body>
+</html>
